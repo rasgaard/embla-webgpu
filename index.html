@@ -39,6 +39,7 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
   h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
   .sub { font-size: 13px; color: var(--muted); }
+  .by { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 2px; }
   .stats { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; font-variant-numeric: tabular-nums; }
   .stat { display: flex; align-items: baseline; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface);
           border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
@@ -47,10 +48,10 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   /* loader */
   #loader { margin: auto; width: min(600px, calc(100% - 32px)); padding: 32px 0; text-align: center; }
   #moe { display: block; width: 100%; height: 186px; margin: 4px 0 10px; cursor: pointer; touch-action: manipulation; }
-  .toy-note { font-size: 12.5px; color: var(--muted); margin: 0 auto 18px; max-width: 56ch; line-height: 1.5; }
+  .toy-note { font-size: 12.5px; color: var(--muted); margin: 0 auto 18px; max-width: 70ch; line-height: 1.5; }
   .toy-note b { color: var(--ink); font-weight: 600; }
   #loader h2 { font-size: 28px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.02em; font-weight: 700; }
-  #loadMsg { margin: 0 auto 20px; color: var(--muted); max-width: 44ch; }
+  #loadMsg { margin: 0 auto 20px; color: var(--muted); max-width: 52ch; }
   #loader .note { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
   progress { appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border: 0; border-radius: 999px; overflow: hidden;
              background: var(--surface-2); margin: 4px 0 2px; }
@@ -127,7 +128,7 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
 <body>
 <header>
   <div class="brand">
-    <div><h1>Embla 1</h1><div class="sub">Runs locally on WebGPU · <a href="https://github.com/rasgaard/embla-webgpu">source</a></div></div>
+    <div><h1>Embla 1 <span class="by">by <a href="https://sevren.ai">Sevren</a></span></h1><div class="sub">Runs locally on WebGPU · <a href="https://github.com/rasgaard/embla-webgpu">source</a></div></div>
   </div>
   <div class="stats" aria-live="polite">
     <div class="stat"><b id="sPrefill">–</b>prefill tok/s</div>
@@ -138,12 +139,11 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
 
 <section id="loader">
   <h2>Embla 1, in your browser</h2>
-  <p id="loadMsg">A 10B mixture-of-experts model that runs entirely on your GPU. The first start downloads about 6.1 GB; after that it loads from the browser cache.</p>
+  <p id="loadMsg">A language model that runs on your own GPU. Nothing you type leaves this device.</p>
   <canvas id="moe" role="img" aria-label="Grid of the model's 31 mixture-of-experts layers by 96 experts; cells light up as the weights load and as tokens are routed through"></canvas>
-  <p class="toy-note">31 layers × 96 experts. Each token is routed to 8 experts per layer, so only about 1B of the 10B parameters run for it.
-    <b>Type anything</b> to send tokens through (routed here by a hash; the real router is learned).</p>
+  <p class="toy-note">Each token wakes up 8 of the 96 experts in every layer. <b>Type something</b> to watch.</p>
   <progress id="loadBar" value="0" max="1" hidden></progress>
-  <p class="note" id="loadNote">Needs a desktop browser with WebGPU and about 7 GB of free GPU memory.</p>
+  <p class="note" id="loadNote">Works best in desktop Chrome or Edge.</p>
   <p class="note" id="cacheNote"></p>
   <div class="actions">
     <button id="loadBtn" class="btn primary">Load model</button>
@@ -193,14 +193,14 @@ async function refreshCacheNote() {
     const names = (await caches.keys()).filter(n => n.startsWith("embla1-")); let n = 0;
     for (const name of names) n += (await (await caches.open(name)).keys()).length;
     const u = await WeightCache.usage();
-    $("cacheNote").textContent = n > 0 ? `Weights are cached on this device (browser storage in use: ${gb(u.used)} GB${u.persisted ? ", persistent" : ""}). Loading will not download them again.`
-      : `Nothing cached yet. The first load downloads about 6.1 GB and stores it in this browser${Number.isFinite(u.quota) ? ` (free quota about ${gb(u.quota - u.used)} GB)` : ""}.`;
+    $("cacheNote").textContent = n > 0 ? "Already downloaded, so it starts from your browser's cache."
+      : "The first visit downloads about 6 GB. After that it loads from your browser's cache.";
     $("clearBtn").hidden = n === 0;
   } catch { $("cacheNote").textContent = ""; }
 }
 async function clearCache() {
   if (!confirm("Delete the cached model weights from this browser? The next load will download them again.")) return;
-  await WeightCache.clearAll(); await refreshCacheNote(); if (engine) note("Cached weights deleted. The loaded model keeps working until you reload the page.");
+  await WeightCache.clearAll(); await refreshCacheNote(); if (engine) note("Cache cleared. The model keeps working until you reload.");
 }
 $("clearBtn").onclick = clearCache; $("clearFoot").onclick = clearCache;
 refreshCacheNote();
@@ -220,6 +220,8 @@ $("loadBtn").onclick = async () => {
         const parts = [`${gb(done)} / ${gb(p.total)} GB`];
         if (p.cachedBytes) parts.push(`${gb(p.cachedBytes)} GB from cache`);
         if (p.netBytes) parts.push(`${gb(p.netBytes)} GB downloaded (${fmt(p.netBytes / 1e6 / Math.max(p.seconds, 0.1), 0)} MB/s)`);
+        const left = (p.total - done) / Math.max(1, done / Math.max(p.seconds, 0.1));    // seconds, at the average speed so far
+        if (p.seconds > 3 && done < p.total) parts.push(left < 10 ? "almost done" : left < 60 ? `done in ${Math.ceil(left / 5) * 5} s` : `done in about ${Math.round(left / 60)} min`);
         $("loadNote").textContent = parts.join(" · ");
       },
     });
@@ -228,9 +230,7 @@ $("loadBtn").onclick = async () => {
     ids = { eos: enc("<|im_end|>")[0], enc };
     toy.stop(); $("loader").hidden = true; $("main").hidden = false; $("foot").hidden = false; $("log").replaceChildren(welcome()); $("input").focus();
     const l = engine.loadStats;
-    note(`Model ready in ${fmt(l.totalSeconds)} s · ` + (l.fromCache ? `weights loaded from the local cache (${gb(l.cachedBytes)} GB)`
-      : l.cachedBytes ? `${gb(l.cachedBytes)} GB from cache, ${gb(l.netBytes)} GB downloaded`
-      : `${gb(l.netBytes)} GB downloaded` + (l.cacheAvailable && !l.cacheWriteError ? " and cached for next time" : l.cacheWriteError ? ` (could not cache: ${l.cacheWriteError})` : " (browser cache unavailable)")));
+    note(`Ready in ${Math.round(l.totalSeconds)} s`);
   } catch (e) {
     $("loadMsg").innerHTML = ""; $("loadMsg").append(Object.assign(document.createElement("span"), { className: "err", textContent: "Could not load the model: " + (e.message || e) }));
     $("loadBar").hidden = true; $("loadBtn").hidden = false; $("loadBtn").textContent = "Retry"; refreshCacheNote();
@@ -240,7 +240,7 @@ $("loadBtn").onclick = async () => {
 const EXAMPLES = ["Hvad er hovedstaden i Danmark? Svar kort.", "Explain how a bicycle stays upright.", "Skriv et kort digt om efterår.", "Write a haiku about GPUs."];
 function welcome() {
   const w = el("welcome"), h = document.createElement("h2"), p = document.createElement("p"), chips = el("chips");
-  h.textContent = "What can I help with?"; p.textContent = "Ask in Danish or English. Everything runs on this device.";
+  h.textContent = "What can I help with?"; p.textContent = "Ask in Danish or English. It all stays on this device.";
   for (const ex of EXAMPLES) chips.append(Object.assign(document.createElement("button"), { type: "button", className: "chip", textContent: ex,
     onclick: () => { if (!busy) { $("input").value = ex; $("form").requestSubmit(); } } }));
   w.append(h, p, chips); return w;
@@ -293,7 +293,7 @@ async function send(userText) {
   const box = { think: document.createElement("details"), answer: el("answer"), collapsed: false };
   box.think.className = "think"; box.think.open = true;
   box.think.append(Object.assign(document.createElement("summary"), { textContent: "Thinking…" }), el("", ""));
-  const bubble = el("msg"); const meta = el("meta", "Prefilling…");
+  const bubble = el("msg"); const meta = el("meta", "Reading…");
   bubble.append(box.think, box.answer, meta); $("log").append(bubble); scroll();
   const gen = []; let preMs = 0, decStart = 0, steps = 0, reason = "";
   try {
@@ -303,7 +303,7 @@ async function send(userText) {
     let logits = await engine.feed(prompt, { signal: abort.signal });
     preMs = performance.now() - t0; first = false;
     $("sPrefill").textContent = fmt(prompt.length / (preMs / 1000));
-    meta.textContent = `Prefill ${prompt.length} tok in ${fmt(preMs / 1000, 2)} s (${fmt(prompt.length / (preMs / 1000))} tok/s) · decoding…`;
+    meta.textContent = "Thinking…";
     decStart = performance.now(); let next = sample(logits, { temperature });
     while (true) {
       gen.push(next); pending = next; ended = false;
@@ -314,19 +314,19 @@ async function send(userText) {
       const dt = (performance.now() - decStart) / 1000, rate = steps / dt;
       $("sDecode").textContent = fmt(rate); setCtx();
       const now = performance.now(); if (now - (box.last || 0) > 120) { box.last = now; render(box, gen); scroll(); }   // ~8 Hz: re-decoding the text every token costs decode speed
-      meta.textContent = `Prefill ${prompt.length} tok in ${fmt(preMs / 1000, 2)} s (${fmt(prompt.length / (preMs / 1000))} tok/s) · decoding ${gen.length} tok · ${fmt(rate)} tok/s`;
+      meta.textContent = `${gen.length} tokens · ${fmt(rate, 0)} tok/s`;
       next = following;
     }
   } catch (e) {
     if (e.name !== "AbortError") { reason = "error"; bubble.append(Object.assign(el("err", String(e.message || e)))); }
     else reason = "stopped";
-    if (!decStart) { engine.reset(); pending = null; ended = true; first = true; reason += " during prefill, conversation reset"; }   // half-filled cache is unusable
+    if (!decStart) { engine.reset(); pending = null; ended = true; first = true; reason += ", chat restarted"; }   // half-filled cache is unusable
   } finally {
     render(box, gen);
     const dec = steps ? steps / ((performance.now() - decStart) / 1000) : NaN;
-    meta.textContent = `Prefill ${fmt(preMs / 1000, 2)} s · decode ${gen.length} tok at ${fmt(dec)} tok/s (${fmt(steps ? (performance.now() - decStart) / 1000 : 0, 1)} s) · ${reason}`;
+    meta.textContent = `${gen.length} tokens` + (steps ? ` · ${fmt(dec, 0)} tok/s` : "") + ({ "end of turn": "", "max tokens": " · reached the token limit", stopped: " · stopped", error: "" }[reason] ?? ` · ${reason}`);
     if (steps) $("sDecode").textContent = fmt(dec);
-    if (reason === "max tokens" && !box.collapsed) meta.textContent += " (still thinking: raise “Max new tokens” to get an answer)";
+    if (reason === "max tokens" && !box.collapsed) meta.textContent += " (raise Max tokens for a full answer)";
     setCtx(); busy = false; abort = null;
     $("send").hidden = false; $("stop").hidden = true; $("input").disabled = false; $("input").focus(); scroll();
   }
