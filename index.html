@@ -69,7 +69,8 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   /* conversation */
   main { flex: 1; overflow-y: auto; padding: 28px 16px 8px; scroll-behavior: smooth; }
   .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
-  .msg { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg { overflow-wrap: anywhere; }
+  .msg.user { white-space: pre-wrap; }
   .msg.user { align-self: flex-end; max-width: 80%; background: var(--accent-soft); padding: 10px 16px;
               border-radius: var(--radius) var(--radius) 6px var(--radius); }
   .think { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 14px; margin: 0 0 12px;
@@ -79,8 +80,24 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   .think summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
                            transform: rotate(-45deg); transition: transform .2s; margin: 0 2px; }
   .think[open] summary::before { transform: rotate(45deg); }
-  .think div { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); white-space: pre-wrap; max-height: 280px; overflow-y: auto; }
+  .think div { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); max-height: 280px; overflow-y: auto; }
   .answer:empty { display: none; }
+  /* Markdown in replies and thinking */
+  .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+  .md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0 0 .75em; }
+  .md ul, .md ol { padding-left: 1.4em; } .md li { margin: .2em 0; } .md li > p { margin: 0; }
+  .md h1, .md h2, .md h3, .md h4 { margin: 1.1em 0 .45em; line-height: 1.3; letter-spacing: -.01em; }
+  .md h1 { font-size: 1.3em; } .md h2 { font-size: 1.18em; } .md h3, .md h4 { font-size: 1.05em; }
+  .md strong { font-weight: 650; }
+  .md code { font: .9em/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2); padding: .1em .35em; border-radius: 5px; }
+  .md pre { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; overflow-x: auto; }
+  .md pre code { background: none; padding: 0; font-size: .86em; }
+  .md blockquote { border-left: 3px solid var(--line); padding-left: 12px; color: var(--muted); }
+  .md table { border-collapse: collapse; display: block; overflow-x: auto; }
+  .md th, .md td { border: 1px solid var(--line); padding: 5px 10px; text-align: left; }
+  .md th { background: var(--surface-2); font-weight: 600; }
+  .md hr { border: 0; border-top: 1px solid var(--line); margin: 1em 0; }
+  .think .md p, .think .md ul, .think .md ol { margin-bottom: .5em; }
   .meta { margin-top: 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .err { color: var(--warn); margin-top: 8px; }
   .empty { align-self: center; text-align: center; color: var(--muted); font-size: 13px; padding: 4px 12px; border-radius: 999px;
@@ -174,6 +191,8 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
 
 <script type="module">
 import { AutoTokenizer, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6";
+import { marked } from "https://cdn.jsdelivr.net/npm/marked@12.0.2/lib/marked.esm.js";
+import DOMPurify from "https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.es.mjs";
 import { Embla, sample, MAX_CONTEXT } from "./src/engine.mjs";
 import { WeightCache } from "./src/weight_cache.mjs";
 import { modelSources } from "./src/config.mjs";
@@ -265,23 +284,22 @@ function render(box, gen) {                                 // gen: generated to
   let text = tok.decode(gen, { skip_special_tokens: false }).replace(/<\|im_end\|>/g, "");
   const cut = text.indexOf("</think>"), thinking = cut < 0 ? text : text.slice(0, cut), answer = cut < 0 ? "" : text.slice(cut + 8).replace(/^\s+/, "");
   box.think.firstElementChild.textContent = cut < 0 ? "Thinking…" : "Thought process";
-  setText(box.think.lastElementChild, thinking.trim());
-  if (cut >= 0 && !box.collapsed) {                         // collapse, as plain text: reopening must not replay the fade-in
-    box.think.open = false; box.collapsed = true; const t = box.think.lastElementChild; t.textContent = t._text ?? "";
+  md(box.think.lastElementChild, thinking.trim());
+  if (cut >= 0 && !box.collapsed) {                         // collapse; reopening must not replay the fade-in
+    box.think.open = false; box.collapsed = true; box.think.lastElementChild.querySelectorAll(".fresh").forEach(n => n.classList.remove("fresh"));
   }
-  setText(box.answer, answer);
+  md(box.answer, answer);
 }
 
-// Append only what is new since the last render, in a span that fades in. If earlier text changed (the tokenizer can re-merge
-// bytes at the end), keep the unchanged prefix as plain text and fade in the rest. Many spans are collapsed into plain text:
-// they finished fading long ago.
-function setText(el, text) {
-  const prev = el._text ?? "";
-  if (text === prev) return;
-  let keep = 0; while (keep < prev.length && keep < text.length && prev[keep] === text[keep]) keep++;
-  if (keep < prev.length || el.childNodes.length > 150) el.textContent = text.slice(0, keep);
-  const add = text.slice(el.textContent.length);
-  if (add) el.append(Object.assign(document.createElement("span"), { className: "fresh", textContent: add }));
+// Markdown -> sanitised HTML (the model's text is never trusted as markup). The whole block is re-rendered each time (~8 Hz while
+// streaming); blocks (paragraphs, list items, code) that are new since the last render fade in.
+marked.setOptions({ gfm: true, breaks: false });
+DOMPurify.addHook("afterSanitizeAttributes", n => { if (n.tagName === "A") { n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } });
+function md(el, text) {
+  if (text === el._text) return;
+  const before = el.querySelectorAll(":scope > *, :scope > ul > li, :scope > ol > li").length;
+  el.innerHTML = DOMPurify.sanitize(marked.parse(text));
+  el.querySelectorAll(":scope > *, :scope > ul > li, :scope > ol > li").forEach((n, i) => { if (i >= before && n.tagName !== "UL" && n.tagName !== "OL") n.classList.add("fresh"); });
   el._text = text;
 }
 
@@ -290,9 +308,9 @@ async function send(userText) {
   $("send").hidden = true; $("stop").hidden = false; $("input").disabled = true;
   $("log").querySelectorAll(".empty, .welcome").forEach(n => n.remove());
   $("log").append(el("msg user", userText));
-  const box = { think: document.createElement("details"), answer: el("answer"), collapsed: false };
+  const box = { think: document.createElement("details"), answer: el("answer md"), collapsed: false };
   box.think.className = "think"; box.think.open = true;
-  box.think.append(Object.assign(document.createElement("summary"), { textContent: "Thinking…" }), el("", ""));
+  box.think.append(Object.assign(document.createElement("summary"), { textContent: "Thinking…" }), el("md", ""));
   const bubble = el("msg"); const meta = el("meta", "Reading…");
   bubble.append(box.think, box.answer, meta); $("log").append(bubble); scroll();
   const gen = []; let preMs = 0, decStart = 0, steps = 0, reason = "";
