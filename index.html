@@ -51,9 +51,12 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   .toy-note { font-size: 12.5px; color: var(--muted); margin: 0 auto 18px; max-width: 70ch; line-height: 1.5; }
   .toy-note b { color: var(--ink); font-weight: 600; }
   #loader h2 { font-size: 28px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.02em; font-weight: 700; }
-  #loadMsg { margin: 0 auto 20px; color: var(--muted); max-width: 52ch; }
-  #loader .note { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
-  progress { appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border: 0; border-radius: 999px; overflow: hidden;
+  #loadMsg { margin: 0 auto 20px; color: var(--muted); max-width: 52ch; min-height: 3.2em; }   /* two lines: the status changes while loading */
+  #loader .note { margin: 10px 0 0; color: var(--muted); font-size: 13px; min-height: 3.2em; }   /* two lines: filled in / reworded while loading */
+  /* The loader is vertically centred, so anything that changes its height moves the whole block. Reserve the space instead. */
+  #loadBar[hidden] { display: block !important; visibility: hidden; }
+  #loader .actions { min-height: 48px; }
+  progress { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border: 0; border-radius: 999px; overflow: hidden;
              background: var(--surface-2); margin: 4px 0 2px; }
   progress::-webkit-progress-bar { background: var(--surface-2); }
   progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; }
