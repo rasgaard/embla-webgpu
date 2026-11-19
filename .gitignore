@@ -1,0 +1,9 @@
+# model files (tools/download.py, tools/build_graph.sh); the site loads them from the Hugging Face Hub
+models/
+build/
+tools/embla_ref/
+.venv/
+__pycache__/
+.DS_Store
+.claude/
+*.log

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embla bench</title>
+<style>
+  :root { --bg: #f6f5f1; --ink: #1d1d1b; --muted: #6b6a64; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141413; --ink: #ecebe5; --muted: #9a998f; } }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+  pre { white-space: pre-wrap; font: 13px/1.45 ui-monospace, Menlo, monospace; }
+  p { color: var(--muted); max-width: 70ch; }
+</style>
+</head>
+<body>
+<p>Parity and speed checks for the engine (see README.md). Options: <code>?n=128</code> decode tokens timed · <code>?ctx=2000</code> filler
+tokens first (long context) · <code>?cmp=8</code> WGSL vs ORT logits for N steps · <code>?decode=ort</code> · <code>?prof=1</code> kernel profile ·
+<code>?ablate=1</code> cost of each kernel class · <code>?cache=0</code> · <code>?source=hub|local</code>.</p>
+<pre id="out">running…</pre>
+<script type="module">
+import { Embla } from "./src/engine.mjs";
+import { modelSources } from "./src/config.mjs";
+import { pageRows } from "./src/engram_hash.mjs";
+
+const q = new URLSearchParams(location.search), out = document.getElementById("out");
+const log = s => { out.textContent += "\n" + s; console.log(s); };
+const argmax = a => { let b = 0; for (let i = 1; i < a.length; i++) if (a[i] > a[b]) b = i; return b; };
+const maxdiff = (a, b) => { let m = 0; for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i] - b[i])); return m; };
+const stats = a => { const s = [...a].sort((x, y) => x - y); return `mean ${(a.reduce((x, y) => x + y, 0) / a.length).toFixed(2)}, median ${s[s.length >> 1].toFixed(2)}, min ${s[0].toFixed(2)} ms`; };
+window.result = {};
+try {
+  const ref = await (await fetch("test/reference.json")).json();
+  const src = await modelSources();
+  let t = performance.now();
+  const e = await Embla.load({ weightsUrl: src.weightsUrl, graphUrl: src.graphUrl, useCache: q.get("cache") !== "0", decode: q.get("decode") || "wgsl" });
+  window.e = e;
+  log(`load (${src.source}) ${((performance.now() - t) / 1000).toFixed(1)} s, decode on ${e.loadStats.decode}: ${JSON.stringify(e.loadStats)}`);
+  if (e.wgsl) { const d = await e.wgsl.diagnostics(); if (d.compile.length || d.init) log(`WGSL diagnostics: ${JSON.stringify(d)}`); }
+
+  // 1. the PyTorch reference (tools/make_reference.py): prompt + 16 greedy tokens
+  t = performance.now(); let lg = await e.feed(ref.ids); const pre = performance.now() - t;
+  const gen = [argmax(lg)];
+  while (gen.length < ref.greedy.length) { lg = await e.feed([gen.at(-1)]); gen.push(argmax(lg)); }
+  const match = gen.filter((x, i) => x === ref.greedy[i]).length;
+  log(`reference: ${match}/${ref.greedy.length} greedy tokens equal to PyTorch (prefill ${ref.ids.length} tokens in ${pre.toFixed(0)} ms)`);
+  window.result.match = match;
+
+  // 2. the GPU engram (hash + gather in WGSL) against the JS hash + HTTP pages
+  if (e.wgsl) {
+    const all = [...ref.ids, ...ref.greedy, 0, 65535]; let md = 0;
+    for (let p = 0; p < all.length; p++) {
+      e.wgsl.setTokens(all, p); const g = await e.wgsl.testEngram(all[p], p);
+      md = Math.max(md, maxdiff(g, await e.tab.gather(pageRows(all.slice(0, p + 1), { orders: [2, 3], heads: 8, pageHeads: 4, pages: 209716, S: 56, pad: 65536 }).slice(p))));
+    }
+    log(`GPU engram vs CPU over ${all.length} positions: maxdiff ${md}`); window.result.engram = md;
+  }
+
+  // 3. optional long context, then WGSL vs ORT logits from the same state
+  e.reset();
+  const ctx = +(q.get("ctx") || 0);
+  if (ctx) {
+    const fill = Array.from({ length: ctx }, (_, i) => (i * 7919) % 60000 + 100);
+    t = performance.now(); await e.feed(fill); const ms = performance.now() - t;
+    log(`prefill ${ctx} filler tokens: ${(ctx / ms * 1000).toFixed(1)} tok/s`);
+  }
+  lg = await e.feed(ref.ids);
+  if (e.wgsl && +(q.get("cmp") ?? 4)) {
+    let worst = 0, same = true;
+    for (let s = 0; s < +(q.get("cmp") ?? 4); s++) {
+      const tok = argmax(lg), pos = e.length;
+      e.wgsl.importOrt(e.kv, pos, e.all); const lw = (await e.wgsl.step(tok, pos)).logits;
+      e.useWgsl = false; lg = await e.feed([tok]); e.useWgsl = true;            // reference: the same step on the ORT graph
+      worst = Math.max(worst, maxdiff(lw, lg)); same &&= argmax(lw) === argmax(lg);
+    }
+    log(`WGSL vs ORT at context ${e.length}: logits maxdiff ${worst.toExponential(2)}, argmax equal: ${same}`);
+    window.result.cmp = { maxdiff: worst, same };
+  }
+
+  // 4. decode speed: GPU-sampled greedy, the way the chat decodes
+  const N = +(q.get("n") || 128), times = [];
+  let tok = argmax(lg);
+  for (let k = 0; k < 8; k++) tok = await e.decodeSample(tok, { temperature: 0 });
+  for (let k = 0; k < N; k++) { const a = performance.now(); tok = await e.decodeSample(tok, { temperature: 0 }); times.push(performance.now() - a); }
+  const mean = times.reduce((x, y) => x + y, 0) / N;
+  log(`decode ${N} tokens at context ~${e.length}: ${(1000 / mean).toFixed(1)} tok/s (${stats(times)})`);
+  window.result.decodeMs = mean;
+
+  // 5. optional: per-kernel GPU timestamps, and the cost of each kernel class by leaving it out of a step (output wrong, timing honest)
+  if (q.get("prof") && e.wgsl) {
+    log(`profile: ${JSON.stringify(await e.wgsl.profile(e.length), (k, v) => typeof v === "number" ? +v.toFixed(2) : v)}`);
+    const pk = await e.wgsl.profileKernels(e.length + 60);
+    log(`kernels (each in its own pass, so inflated; sum ${pk.totalMs.toFixed(2)} ms):\n${pk.rows.slice(0, 20).map(([k, ms, c]) => `  ${ms.toFixed(3)} ms  x${c}  ${k}`).join("\n")}`);
+  }
+  if (q.get("ablate") && e.wgsl) {
+    const run = async () => { e.reset(); await e.feed([1, 2, 3, 4, 5, 6, 7, 8]); let t2 = 5; for (let k = 0; k < 10; k++) t2 = await e.decodeSample(t2, { temperature: 0 });
+      const a = performance.now(); for (let k = 0; k < 80; k++) t2 = await e.decodeSample(t2, { temperature: 0 }); return (performance.now() - a) / 80; };
+    const classes = { routedExperts: /^moe/, sharedExpert: /^gemv2_(2048x1024|1024x2048)/, router: /^(dotRows|router)/, attnMatmuls: /^gemv2_2048x(3072|2560|2048)/,
+      attention: /^(rope|attn|full|sparse|sel|qNorm)/, mixes: /^(mix|copy)/, lmHead: /65536/ };
+    const base = []; const res = {};
+    for (let r = 0; r < 2; r++) { e.wgsl.skip = null; base.push(await run()); for (const [k, re] of Object.entries(classes)) { e.wgsl.skip = re; (res[k] ||= []).push(await run()); } }
+    e.wgsl.skip = null; const b = (base[0] + base[1]) / 2;
+    log(`ablation (step ${b.toFixed(2)} ms): ${Object.entries(res).map(([k, v]) => `${k} ${(b - (v[0] + v[1]) / 2).toFixed(2)}`).join(" · ")} ms`);
+  }
+  log("done");
+} catch (err) { log("FAIL " + err + "\n" + (err.stack || "")); window.result.err = String(err); }
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+[project]
+name = "embla-webgpu"
+version = "0.1.0"
+description = "Export Embla 1 (4-bit) to an ONNX step graph for the browser engine"
+requires-python = ">=3.12"
+dependencies = [
+    "torch",
+    "transformers>=5.9",
+    "onnx",
+    "onnxruntime",
+    "onnxscript",
+    "safetensors",
+    "numpy",
+    "huggingface-hub>=2.4.0",
+]
