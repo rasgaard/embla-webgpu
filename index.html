@@ -45,7 +45,10 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   .stat b { color: var(--ink); font-weight: 600; font-size: 13px; }
 
   /* loader */
-  #loader { margin: auto; width: min(520px, calc(100% - 32px)); padding: 32px 0; text-align: center; }
+  #loader { margin: auto; width: min(600px, calc(100% - 32px)); padding: 32px 0; text-align: center; }
+  #moe { display: block; width: 100%; height: 186px; margin: 4px 0 10px; cursor: pointer; touch-action: manipulation; }
+  .toy-note { font-size: 12.5px; color: var(--muted); margin: 0 auto 18px; max-width: 56ch; line-height: 1.5; }
+  .toy-note b { color: var(--ink); font-weight: 600; }
   #loader h2 { font-size: 28px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.02em; font-weight: 700; }
   #loadMsg { margin: 0 auto 20px; color: var(--muted); max-width: 44ch; }
   #loader .note { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
@@ -117,7 +120,7 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
     .stats { margin-left: 0; width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 5px; }
     .stat { padding: 3px 8px; font-size: 11px; white-space: nowrap; gap: 4px; } .stat b { font-size: 12px; }
     .msg.user { max-width: 90%; }
-    .welcome { margin-top: 4vh; } #loader h2 { font-size: 24px; }
+    .welcome { margin-top: 4vh; } #loader h2 { font-size: 24px; } #moe { height: 150px; }
   }
 </style>
 </head>
@@ -136,6 +139,9 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
 <section id="loader">
   <h2>Embla 1, in your browser</h2>
   <p id="loadMsg">A 10B mixture-of-experts model that runs entirely on your GPU. The first start downloads about 6.1 GB; after that it loads from the browser cache.</p>
+  <canvas id="moe" role="img" aria-label="Grid of the model's 31 mixture-of-experts layers by 96 experts; cells light up as the weights load and as tokens are routed through"></canvas>
+  <p class="toy-note">31 layers × 96 experts. Each token is routed to 8 experts per layer, so only about 1B of the 10B parameters run for it.
+    <b>Type anything</b> to send tokens through (routed here by a hash; the real router is learned).</p>
   <progress id="loadBar" value="0" max="1" hidden></progress>
   <p class="note" id="loadNote">Needs a desktop browser with WebGPU and about 7 GB of free GPU memory.</p>
   <p class="note" id="cacheNote"></p>
@@ -171,8 +177,10 @@ import { AutoTokenizer, env } from "https://cdn.jsdelivr.net/npm/@huggingface/tr
 import { Embla, sample, MAX_CONTEXT } from "./src/engine.mjs";
 import { WeightCache } from "./src/weight_cache.mjs";
 import { modelSources } from "./src/config.mjs";
+import { moeToy } from "./src/moe_toy.mjs";
 
 const $ = id => document.getElementById(id);
+const toy = moeToy($("moe"));                                   // the expert grid on the loading screen (src/moe_toy.mjs)
 
 let engine, tok, ids, busy = false, abort = null;
 let pending = null, ended = true, first = true;            // see "turn bookkeeping" below
@@ -208,7 +216,7 @@ $("loadBtn").onclick = async () => {
       weightsUrl: src.weightsUrl, graphUrl: src.graphUrl,
       onStatus: s => { status = s; $("loadMsg").textContent = s; },
       onProgress: p => {
-        const done = p.cachedBytes + p.netBytes; $("loadBar").max = p.total; $("loadBar").value = done;
+        const done = p.cachedBytes + p.netBytes; $("loadBar").max = p.total; $("loadBar").value = done; toy.setProgress(done / p.total);
         const parts = [`${gb(done)} / ${gb(p.total)} GB`];
         if (p.cachedBytes) parts.push(`${gb(p.cachedBytes)} GB from cache`);
         if (p.netBytes) parts.push(`${gb(p.netBytes)} GB downloaded (${fmt(p.netBytes / 1e6 / Math.max(p.seconds, 0.1), 0)} MB/s)`);
@@ -218,7 +226,7 @@ $("loadBtn").onclick = async () => {
     tok = await tokJob; await persist;
     const enc = s => tok.encode(s, { add_special_tokens: false });
     ids = { eos: enc("<|im_end|>")[0], enc };
-    $("loader").hidden = true; $("main").hidden = false; $("foot").hidden = false; $("log").replaceChildren(welcome()); $("input").focus();
+    toy.stop(); $("loader").hidden = true; $("main").hidden = false; $("foot").hidden = false; $("log").replaceChildren(welcome()); $("input").focus();
     const l = engine.loadStats;
     note(`Model ready in ${fmt(l.totalSeconds)} s · ` + (l.fromCache ? `weights loaded from the local cache (${gb(l.cachedBytes)} GB)`
       : l.cachedBytes ? `${gb(l.cachedBytes)} GB from cache, ${gb(l.netBytes)} GB downloaded`

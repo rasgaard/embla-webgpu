@@ -95,6 +95,7 @@ src/
   engram_hash.mjs     engram n-gram hashing
   weight_cache.mjs    Cache API store for downloaded weights
   config.mjs          where the model files come from
+  moe_toy.mjs         the expert grid to play with while the weights load
   ort.mjs             onnxruntime-web 1.26.0 from jsDelivr
 tools/                Python: download, export, graph rewrites, reference vectors
 test/reference.json   PyTorch reference tokens
