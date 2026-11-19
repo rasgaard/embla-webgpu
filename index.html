@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Embla 1 in the browser</title>
 <meta name="description" content="Embla 1, a 10B mixture-of-experts language model (4-bit), running entirely in the browser on WebGPU.">
+<script>/* WebGPU needs a secure context: send plain-http visitors to https (localhost counts as secure already) */
+if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) location.replace("https:" + location.href.slice(5));</script>
 <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b0d14" media="(prefers-color-scheme: dark)">
 <style>
@@ -122,7 +124,7 @@
 <body>
 <header>
   <div class="brand">
-    <div><h1>Embla 1</h1><div class="sub">Runs locally on WebGPU<span id="srcLink" hidden> · <a>source</a></span></div></div>
+    <div><h1>Embla 1</h1><div class="sub">Runs locally on WebGPU · <a href="https://github.com/rasgaard/embla-webgpu">source</a></div></div>
   </div>
   <div class="stats" aria-live="polite">
     <div class="stat"><b id="sPrefill">–</b>prefill tok/s</div>
@@ -171,9 +173,6 @@ import { WeightCache } from "./src/weight_cache.mjs";
 import { modelSources } from "./src/config.mjs";
 
 const $ = id => document.getElementById(id);
-if (location.hostname.endsWith(".github.io")) {                  // on GitHub Pages: link the repository (<user>.github.io/<repo>/)
-  $("srcLink").querySelector("a").href = `https://github.com/${location.hostname.split(".")[0]}/${location.pathname.split("/")[1]}`; $("srcLink").hidden = false;
-}
 
 let engine, tok, ids, busy = false, abort = null;
 let pending = null, ended = true, first = true;            // see "turn bookkeeping" below

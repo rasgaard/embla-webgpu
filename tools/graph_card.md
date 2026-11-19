@@ -8,7 +8,7 @@ tags: [embla, webgpu, onnxruntime-web, onnx]
 
 # Embla1-4bit, WebGPU step graph
 
-The ONNX graph that runs prefill for Embla 1 on WebGPU, a browser engine for
+The ONNX graph that runs prefill for [Embla 1 on WebGPU](https://github.com/rasgaard/embla-webgpu) ([live demo](https://rasgaard.com/embla-webgpu/)), a browser engine for
 [`sevren-ai/Embla1-4bit`](https://huggingface.co/sevren-ai/Embla1-4bit). One step of the model (a prefill chunk of up to 64
 tokens, or one decode token) with the KV / engram-conv cache as explicit inputs and outputs, exported from the PyTorch reference
 and rewritten for onnxruntime-web's WebGPU execution provider.
@@ -18,6 +18,6 @@ and rewritten for onnxruntime-web's WebGPU execution provider.
 - The routed experts (3.9 GB) are **graph inputs**, not part of this repo. The engine streams them from
   `sevren-ai/Embla1-4bit/model.safetensors`. The engram rows are an input too (looked up in that repo's `engram_table.safetensors`).
 
-Build: `sh tools/build_graph.sh` in the GitHub repo (export + four graph rewrites, documented there).
+Build: `sh tools/build_graph.sh` in the [GitHub repo](https://github.com/rasgaard/embla-webgpu) (export + four graph rewrites, documented there).
 
 Model by [sevren.ai](https://huggingface.co/sevren-ai), MIT licensed. This is a derived format of their weights, under the same license.
