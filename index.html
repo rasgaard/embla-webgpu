@@ -51,8 +51,12 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   .toy-note { font-size: 12.5px; color: var(--muted); margin: 0 auto 18px; max-width: 70ch; line-height: 1.5; }
   .toy-note b { color: var(--ink); font-weight: 600; }
   #loader h2 { font-size: 28px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.02em; font-weight: 700; }
-  #loadMsg { margin: 0 auto 20px; color: var(--muted); max-width: 52ch; min-height: 3.2em; }   /* two lines: the status changes while loading */
+  #loadMsg { margin: 0 auto 20px; color: var(--muted); max-width: 52ch; min-height: 48px; }   /* two lines: the status changes while loading */
+  /* While loading the status is always exactly one line, so it can't flip between one and two as the text and digits change. */
+  #loadMsg.busy { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(11.5px, 3.7vw, 15px); font-variant-numeric: tabular-nums; }
   #loader .note { margin: 10px 0 0; color: var(--muted); font-size: 13px; min-height: 3.2em; }   /* two lines: filled in / reworded while loading */
+  #loadNote { font-variant-numeric: tabular-nums; }
+  #loadNote span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* progress: two fixed rows, never wrapping */
   /* The loader is vertically centred, so anything that changes its height moves the whole block. Reserve the space instead. */
   #loadBar[hidden] { display: block !important; visibility: hidden; }
   #loader .actions { min-height: 48px; }
@@ -228,7 +232,8 @@ $("clearBtn").onclick = clearCache; $("clearFoot").onclick = clearCache;
 refreshCacheNote();
 
 $("loadBtn").onclick = async () => {
-  $("loadBtn").hidden = true; $("clearBtn").hidden = true; $("loadBar").hidden = false;
+  const act = document.querySelector("#loader .actions"); act.style.minHeight = act.offsetHeight + "px";   // the buttons may sit on 1 or 2 rows (by width): keep the space
+  $("loadBtn").hidden = true; $("clearBtn").hidden = true; $("loadBar").hidden = false; $("loadMsg").style.minHeight = $("loadMsg").offsetHeight + "px"; $("loadMsg").classList.add("busy");   // keep the intro text's height (2-3 lines, by width)
   try {
     const persist = WeightCache.requestPersistence();             // still inside the user gesture: ask the browser not to evict the 6 GB
     const src = await modelSources();
@@ -239,12 +244,13 @@ $("loadBtn").onclick = async () => {
       onStatus: s => { status = s; $("loadMsg").textContent = s; },
       onProgress: p => {
         const done = p.cachedBytes + p.netBytes; $("loadBar").max = p.total; $("loadBar").value = done; toy.setProgress(done / p.total);
-        const parts = [`${gb(done)} / ${gb(p.total)} GB`];
-        if (p.cachedBytes) parts.push(`${gb(p.cachedBytes)} GB from cache`);
-        if (p.netBytes) parts.push(`${gb(p.netBytes)} GB downloaded (${fmt(p.netBytes / 1e6 / Math.max(p.seconds, 0.1), 0)} MB/s)`);
+        const detail = [];                                              // second row: where the bytes come from, speed, time left
+        if (p.cachedBytes) detail.push(`${gb(p.cachedBytes)} GB from cache`);
+        if (p.netBytes) detail.push(`${fmt(p.netBytes / 1e6 / Math.max(p.seconds, 0.1), 0)} MB/s`);
         const left = (p.total - done) / Math.max(1, done / Math.max(p.seconds, 0.1));    // seconds, at the average speed so far
-        if (p.seconds > 3 && done < p.total) parts.push(left < 10 ? "almost done" : left < 60 ? `done in ${Math.ceil(left / 5) * 5} s` : `done in about ${Math.round(left / 60)} min`);
-        $("loadNote").textContent = parts.join(" · ");
+        if (p.seconds > 3 && done < p.total) detail.push(left < 10 ? "almost done" : left < 60 ? `done in ${Math.ceil(left / 5) * 5} s` : `done in about ${Math.round(left / 60)} min`);
+        const row = t => Object.assign(document.createElement("span"), { textContent: t || "\u00a0" });
+        $("loadNote").replaceChildren(row(`${gb(done)} / ${gb(p.total)} GB`), row(detail.join(" · ")));
       },
     });
     tok = await tokJob; await persist;
@@ -254,8 +260,8 @@ $("loadBtn").onclick = async () => {
     const l = engine.loadStats;
     note(`Ready in ${Math.round(l.totalSeconds)} s`);
   } catch (e) {
-    $("loadMsg").innerHTML = ""; $("loadMsg").append(Object.assign(document.createElement("span"), { className: "err", textContent: "Could not load the model: " + (e.message || e) }));
-    $("loadBar").hidden = true; $("loadBtn").hidden = false; $("loadBtn").textContent = "Retry"; refreshCacheNote();
+    $("loadMsg").classList.remove("busy"); $("loadMsg").style.minHeight = ""; $("loadMsg").innerHTML = ""; $("loadMsg").append(Object.assign(document.createElement("span"), { className: "err", textContent: "Could not load the model: " + (e.message || e) }));
+    $("loadBar").hidden = true; document.querySelector("#loader .actions").style.minHeight = ""; $("loadBtn").hidden = false; $("loadBtn").textContent = "Retry"; refreshCacheNote();
   }
 };
 
