@@ -56,7 +56,7 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   progress { appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border: 0; border-radius: 999px; overflow: hidden;
              background: var(--surface-2); margin: 4px 0 2px; }
   progress::-webkit-progress-bar { background: var(--surface-2); }
-  progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; transition: width .3s; }
+  progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; }
   progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
   .actions { display: flex; gap: 8px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
   .btn { border: 1px solid var(--line); background: var(--surface); padding: 9px 18px; border-radius: 999px; cursor: pointer; font-weight: 500;
@@ -85,13 +85,13 @@ if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   .err { color: var(--warn); margin-top: 8px; }
   .empty { align-self: center; text-align: center; color: var(--muted); font-size: 13px; padding: 4px 12px; border-radius: 999px;
            background: var(--surface); border: 1px solid var(--line); }
-  .welcome { text-align: center; margin: 9vh auto 0; max-width: 520px; }
+  .welcome { text-align: center; margin: 9vh auto 0; max-width: 700px; }
   .welcome h2 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 6px; }
   .welcome p { color: var(--muted); margin: 0 0 22px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-  .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 14px; cursor: pointer; font-size: 13.5px;
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12.5px; color: var(--muted);
           transition: border-color .15s, background .15s; text-align: left; }
-  .chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .chip:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
 
   /* composer */
   footer { padding: 8px 16px 14px; background: linear-gradient(to top, var(--bg) 70%, transparent); }
@@ -237,7 +237,7 @@ $("loadBtn").onclick = async () => {
   }
 };
 
-const EXAMPLES = ["Hvad er hovedstaden i Danmark? Svar kort.", "Explain how a bicycle stays upright.", "Skriv et kort digt om efterår.", "Write a haiku about GPUs."];
+const EXAMPLES = ["Why run AI locally?", "What is hygge?", "Hvad er Danmark kendt for?", "A short poem about GPUs"];
 function welcome() {
   const w = el("welcome"), h = document.createElement("h2"), p = document.createElement("p"), chips = el("chips");
   h.textContent = "What can I help with?"; p.textContent = "Ask in Danish or English. It all stays on this device.";
