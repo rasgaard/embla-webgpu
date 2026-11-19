@@ -6,7 +6,7 @@ checkpoint. Nothing leaves the machine: the weights stream from the Hugging Face
 browser.
 
 On an Apple M4 Pro in Chromium: **~180 tokens/s** decode in the chat (5.4 ms a token; 6.5 ms at 2,000+ tokens of context) and
-**~100 tokens/s** prefill. [optimizations.md](optimizations.md) is the log of how it got there from 630 ms a token.
+**~100 tokens/s** prefill, with up to 8,192 tokens of context. [optimizations.md](optimizations.md) is the log of how it got there from 630 ms a token.
 
 ## How it works
 

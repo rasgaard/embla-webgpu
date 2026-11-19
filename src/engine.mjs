@@ -11,7 +11,7 @@ import { WeightCache, remoteSignature, fetchBytes, contentTag } from "./weight_c
 import { WgslDecoder } from "./wgsl_decode.mjs";
 
 const ENGRAM_CFG = { orders: [2, 3], heads: 8, pageHeads: 4, pages: 209716, S: 56, pad: 65536 };
-export const MAX_CONTEXT = 4096;
+export const MAX_CONTEXT = 8192;                      // the graph's RoPE / key-index tables cover 8,192 + 64 positions
 
 // A 60-byte ONNX model (y = -x). Creating a session for it starts ORT's WebGPU backend and hands us ORT's GPUDevice before the
 // real graph is compiled, so the experts can stream to the GPU meanwhile. (Giving ORT a device of our own instead breaks its

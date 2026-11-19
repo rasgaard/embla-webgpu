@@ -260,7 +260,7 @@ fn main(@builtin(local_invocation_id) lid : vec3<u32>) {
 
 /** sliding layers: q / k head norm (gain 1 + w, eps fp32), RoPE (first 64 dims, half split, ORT's cos / -sin tables), and the
  *  new k / v into the ring (slot pos % 128). Workgroup per head: 16 q heads then 4 k heads. */
-const ropeAppendSrc = (H, HKV) => /* wgsl */`
+const ropeAppendSrc = (H, HKV, ropeP) => /* wgsl */`
 ${INFO}
 @group(0) @binding(0) var<uniform> info : Info;
 @group(0) @binding(1) var<storage, read_write> q : array<f32>;   // q [H*128] (normed + rotated in place), then k, v [HKV*128] each
@@ -281,7 +281,7 @@ fn main(@builtin(workgroup_id) wg : vec3<u32>, @builtin(local_invocation_id) lid
   workgroupBarrier();
   var o = nv[d];
   let P = info.pos; let i = d % 32u;
-  let c = rope[P * 32u + i]; let ns = rope[${8256 * 32}u + P * 32u + i];
+  let c = rope[P * 32u + i]; let ns = rope[${ropeP * 32}u + P * 32u + i];
   if (d < 32u) { o = nv[d] * c - nv[d + 32u] * ns; } else if (d < 64u) { o = nv[d] * c + nv[d - 32u] * ns; }
   if (isq) { q[h * 128u + d] = o; }
   else {
@@ -694,8 +694,9 @@ export class WgslDecoder {
   /** device: ORT's GPUDevice (must have "subgroups"). fetchTensor(key) -> {t, u8}: a model.safetensors tensor. experts: the ORT
    *  graph's expert tensors (fcN / projT). rope: Float32Array, the graph's cos table [P][32] then its -sin table [P][32].
    *  cfg: config.json. engram: {pages, chunk(k, page0, n) -> Promise<Uint8Array n x 4032>}, the page-packed table of order k. */
-  static async create({ device, fetchTensor, experts, rope, cfg, engram, maxPos = 4160, onStatus = () => {} }) {
+  static async create({ device, fetchTensor, experts, rope, cfg, engram, maxPos = 8192 + 64, onStatus = () => {} }) {
     if (!device.features.has("subgroups")) throw new Error("WGSL decoder: the GPU device has no \"subgroups\" feature");
+    if (rope.length / 64 < maxPos) throw new Error(`WGSL decoder: the graph's RoPE table covers ${rope.length / 64} positions, fewer than ${maxPos}`);
     const dec = new WgslDecoder(device, cfg, maxPos);
     await dec.#init(fetchTensor, experts, rope, engram, onStatus);
     return dec;
@@ -800,7 +801,7 @@ export class WgslDecoder {
     this.rl = f4(E); this.route = f4(16); this.sh = f4(SH); this.act = f4(TOPK * F); this.hmlp = f4(D);
     this.eIn = f4(D); this.ekv = f4(2 * D); this.hist = f4(HRING * D);
     this.logits = f4(VOCAB); this.staging = dev.createBuffer({ size: VOCAB * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-    this.rope = this.#upload(rope);
+    this.rope = this.#upload(rope); this.ropeP = rope.length / 64;     // cos [P][32], then -sin [P][32]
     this.cache = {};
     for (let i = 0; i < this.L; i++) {
       const t = this.types[i];
@@ -851,7 +852,7 @@ export class WgslDecoder {
       for (let j = 1; j < Kq; j++) copy(ops, hs(j), this.taps[this.bridges[i][j - 1]]);
       if (t === "sliding_attention") {
         gemv(ops, Lw.qkv, D, 24 * HD, "store", hs(0), { buffer: this.qkv, offset: 0, size: 24 * HD * 4 });
-        this.#op(ops, "rope16_4", ropeAppendSrc(16, 4), [this.info, { buffer: this.qkv, offset: 0, size: 24 * HD * 4 }, Lw.nw, this.rope, C.k, C.v], 20);
+        this.#op(ops, "rope16_4", ropeAppendSrc(16, 4, this.ropeP), [this.info, { buffer: this.qkv, offset: 0, size: 24 * HD * 4 }, Lw.nw, this.rope, C.k, C.v], 20);
         this.#op(ops, "attnSliding4", attnSliding4Src(16, 4), [this.info, this.qb, C.k, C.v, this.ob], 16);
       } else if (t === "full_attention") {
         const srcIn = cfg.kv_sources[i] === i ? hs(0) : this.taps[i];

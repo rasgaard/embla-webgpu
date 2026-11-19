@@ -45,7 +45,7 @@ def gpu_i32(node, inp, n):                        # int64 GPU tensor -> int32 on
     new_nodes[node.name].append(helper.make_node("Gather", [table, inp], [out], axis=0, name=nm("i64to32")))
     return out
 
-N_EXPERTS, MAX_KEYS = 96, 8192 + 64                # expert ids; key positions (full-layer cache dims go to 8192, + chunk)
+N_EXPERTS, MAX_KEYS = 96, 8192 + 64                # expert ids; key positions (context up to 8,192, + one chunk)
 stats = collections.Counter()
 for n in list(g.node):
     if n.op_type != "TopK": continue

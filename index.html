@@ -5,94 +5,162 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Embla 1 in the browser</title>
 <meta name="description" content="Embla 1, a 10B mixture-of-experts language model (4-bit), running entirely in the browser on WebGPU.">
+<meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0d14" media="(prefers-color-scheme: dark)">
 <style>
   :root {
-    --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --line: #e3e1d9;
-    --accent: #1f6f5b; --accent-ink: #ffffff; --user: #e8efe9; --think: #f0eee7; --warn: #a4372b;
+    --bg: #f6f7fb; --surface: #ffffff; --surface-2: #f0f2f8; --ink: #111427; --muted: #667089; --line: #e3e6ef;
+    --accent: #5b5bf6; --accent-2: #12b5a6; --accent-ink: #ffffff; --accent-soft: #ebebff; --warn: #d1435b;
+    --shadow: 0 1px 2px rgba(17, 20, 39, .04), 0 8px 24px rgba(17, 20, 39, .06);
+    --radius: 18px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #141413; --panel: #1c1c1a; --ink: #ecebe5; --muted: #9a998f; --line: #2d2d2a;
-      --accent: #4fb89c; --accent-ink: #0e1512; --user: #22302b; --think: #242421; --warn: #e58a7e;
+      --bg: #0b0d14; --surface: #141724; --surface-2: #1b1f2f; --ink: #e8eaf4; --muted: #8c93ab; --line: #252a3c;
+      --accent: #8a8cff; --accent-2: #3ad6c4; --accent-ink: #0b0d14; --accent-soft: #23264a; --warn: #ff7a8f;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .35);
     }
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
-         display: flex; flex-direction: column; }
-  header { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 12px;
-           align-items: baseline; flex-wrap: wrap; }
-  h1 { font-size: 16px; margin: 0; font-weight: 650; }
-  h1 small { font-weight: 400; color: var(--muted); margin-left: 6px; }
-  h1 small a { color: var(--accent); }
-  .stats { display: flex; gap: 8px 18px; flex-wrap: wrap; margin-left: auto; font-variant-numeric: tabular-nums; }
-  .stat { display: flex; flex-direction: column; line-height: 1.2; }
-  .stat b { font-size: 15px; } .stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  #loader { margin: 24px auto; width: min(560px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line);
-            border-radius: 10px; padding: 16px; }
-  #loader p { margin: 0 0 10px; } #loader .note { color: var(--muted); font-size: 13px; }
-  progress { width: 100%; height: 8px; accent-color: var(--accent); }
-  #loader button { margin-top: 12px; margin-right: 8px; }
-  main { flex: 1; overflow-y: auto; padding: 16px; }
-  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-  .msg { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); white-space: pre-wrap; overflow-wrap: anywhere; }
-  .msg.user { background: var(--user); align-self: flex-end; max-width: 85%; }
-  .think { background: var(--think); border-radius: 8px; padding: 8px 12px; margin: 0 0 8px; color: var(--muted); font-size: 13.5px; }
-  .think summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-  .think div { margin-top: 6px; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
-  .meta { margin-top: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; border-top: 1px dashed var(--line); padding-top: 6px; }
-  .err { color: var(--warn); }
-  footer { border-top: 1px solid var(--line); background: var(--panel); padding: 10px 16px 14px; }
-  form { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
-  textarea { flex: 1; resize: none; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
-             padding: 9px 11px; min-height: 42px; max-height: 160px; }
-  button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 9px 14px; cursor: pointer; }
-  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .opts { max-width: 760px; margin: 8px auto 0; display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--muted); }
-  .opts label { display: flex; align-items: center; gap: 6px; } .opts input[type=number] { width: 64px; }
-  .opts input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
-  .opts .grow { flex: 1; } .empty { text-align: center; color: var(--muted); margin-top: 8vh; }
   [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); display: flex; flex-direction: column;
+         font: 15px/1.6 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  button, input, textarea { font: inherit; color: inherit; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* header */
+  header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap;
+           padding: 12px max(16px, calc((100% - 960px) / 2)); background: color-mix(in srgb, var(--bg) 80%, transparent);
+           backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+  .sub { font-size: 13px; color: var(--muted); }
+  .stats { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .stat { display: flex; align-items: baseline; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface);
+          border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .stat b { color: var(--ink); font-weight: 600; font-size: 13px; }
+
+  /* loader */
+  #loader { margin: auto; width: min(520px, calc(100% - 32px)); padding: 32px 0; text-align: center; }
+  #loader h2 { font-size: 28px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.02em; font-weight: 700; }
+  #loadMsg { margin: 0 auto 20px; color: var(--muted); max-width: 44ch; }
+  #loader .note { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+  progress { appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border: 0; border-radius: 999px; overflow: hidden;
+             background: var(--surface-2); margin: 4px 0 2px; }
+  progress::-webkit-progress-bar { background: var(--surface-2); }
+  progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; transition: width .3s; }
+  progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .actions { display: flex; gap: 8px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+  .btn { border: 1px solid var(--line); background: var(--surface); padding: 9px 18px; border-radius: 999px; cursor: pointer; font-weight: 500;
+         transition: background .15s, border-color .15s, transform .05s; }
+  .btn:hover { background: var(--surface-2); } .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; padding: 11px 26px;
+                 box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+
+  /* conversation */
+  main { flex: 1; overflow-y: auto; padding: 28px 16px 8px; scroll-behavior: smooth; }
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  .msg { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.user { align-self: flex-end; max-width: 80%; background: var(--accent-soft); padding: 10px 16px;
+              border-radius: var(--radius) var(--radius) 6px var(--radius); }
+  .think { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 14px; margin: 0 0 12px;
+           color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+  .think summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; user-select: none; }
+  .think summary::-webkit-details-marker { display: none; }
+  .think summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+                           transform: rotate(-45deg); transition: transform .2s; margin: 0 2px; }
+  .think[open] summary::before { transform: rotate(45deg); }
+  .think div { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); white-space: pre-wrap; max-height: 280px; overflow-y: auto; }
+  .answer:empty { display: none; }
+  .meta { margin-top: 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .err { color: var(--warn); margin-top: 8px; }
+  .empty { align-self: center; text-align: center; color: var(--muted); font-size: 13px; padding: 4px 12px; border-radius: 999px;
+           background: var(--surface); border: 1px solid var(--line); }
+  .welcome { text-align: center; margin: 9vh auto 0; max-width: 520px; }
+  .welcome h2 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .welcome p { color: var(--muted); margin: 0 0 22px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 14px; cursor: pointer; font-size: 13.5px;
+          transition: border-color .15s, background .15s; text-align: left; }
+  .chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+  /* composer */
+  footer { padding: 8px 16px 14px; background: linear-gradient(to top, var(--bg) 70%, transparent); }
+  form { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; background: var(--surface); border: 1px solid var(--line);
+         border-radius: 24px; padding: 8px 8px 8px 18px; box-shadow: var(--shadow); transition: border-color .15s; }
+  form:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+  textarea { flex: 1; resize: none; border: 0; background: transparent; padding: 8px 0; min-height: 40px; max-height: 180px; line-height: 1.5; outline: none; }
+  textarea::placeholder { color: var(--muted); }
+  .icon { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer;
+          background: var(--accent); color: var(--accent-ink); transition: background .15s, transform .05s; }
+  .icon:hover { background: color-mix(in srgb, var(--accent) 88%, #000); } .icon:active { transform: scale(.96); }
+  .icon.stop { background: var(--ink); color: var(--bg); }
+  .icon svg { width: 18px; height: 18px; }
+  .opts { max-width: 760px; margin: 10px auto 0; display: flex; gap: 6px 16px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); padding: 0 6px; }
+  .opts label { display: flex; align-items: center; gap: 6px; }
+  .opts input { width: 64px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-variant-numeric: tabular-nums; }
+  .opts .grow { flex: 1; }
+  .link { border: 0; background: none; padding: 2px 4px; color: var(--muted); cursor: pointer; border-radius: 6px; font-size: 12.5px; }
+  .link:hover { color: var(--ink); background: var(--surface-2); }
+  input:disabled, textarea:disabled { opacity: .6; }
+
   .fresh { animation: token-in .4s ease-out both; }                 /* newly decoded text */
   @keyframes token-in { from { opacity: 0; } to { opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .fresh { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .fresh { animation: none; } main { scroll-behavior: auto; } }
+  @media (max-width: 640px) {
+    header { padding: 10px 16px; gap: 8px; } .sub { display: none; }
+    .stats { margin-left: 0; width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 5px; }
+    .stat { padding: 3px 8px; font-size: 11px; white-space: nowrap; gap: 4px; } .stat b { font-size: 12px; }
+    .msg.user { max-width: 90%; }
+    .welcome { margin-top: 4vh; } #loader h2 { font-size: 24px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Embla 1 <small>4-bit · runs locally on WebGPU<span id="srcLink" hidden> · <a>source</a></span></small></h1>
+  <div class="brand">
+    <div><h1>Embla 1</h1><div class="sub">Runs locally on WebGPU<span id="srcLink" hidden> · <a>source</a></span></div></div>
+  </div>
   <div class="stats" aria-live="polite">
-    <div class="stat"><b id="sPrefill">–</b><span>Prefill tok/s</span></div>
-    <div class="stat"><b id="sDecode">–</b><span>Decode tok/s</span></div>
-    <div class="stat"><b id="sCtx">0 / 4096</b><span>Context</span></div>
+    <div class="stat"><b id="sPrefill">–</b>prefill tok/s</div>
+    <div class="stat"><b id="sDecode">–</b>decode tok/s</div>
+    <div class="stat"><b id="sCtx">0 / 8192</b>context</div>
   </div>
 </header>
 
 <section id="loader">
-  <p id="loadMsg">Embla 1 runs entirely in your browser. First start streams about 6.1 GB of weights to your GPU.</p>
+  <h2>Embla 1, in your browser</h2>
+  <p id="loadMsg">A 10B mixture-of-experts model that runs entirely on your GPU. The first start downloads about 6.1 GB; after that it loads from the browser cache.</p>
   <progress id="loadBar" value="0" max="1" hidden></progress>
-  <p class="note" id="loadNote">Needs a desktop browser with WebGPU and a few GB of free GPU memory.</p>
+  <p class="note" id="loadNote">Needs a desktop browser with WebGPU and about 7 GB of free GPU memory.</p>
   <p class="note" id="cacheNote"></p>
-  <button id="loadBtn" class="primary">Load model</button>
-  <button id="clearBtn" type="button" hidden>Clear cached weights</button>
+  <div class="actions">
+    <button id="loadBtn" class="btn primary">Load model</button>
+    <button id="clearBtn" class="btn" type="button" hidden>Clear cached weights</button>
+  </div>
 </section>
 
-<main id="main" hidden><div class="wrap" id="log"><div class="empty">Ask something, in Danish or English.</div></div></main>
+<main id="main" hidden><div class="wrap" id="log"></div></main>
 
 <footer id="foot" hidden>
   <form id="form">
     <textarea id="input" rows="1" placeholder="Message Embla…" aria-label="Message"></textarea>
-    <button id="send" class="primary" type="submit">Send</button>
-    <button id="stop" type="button" hidden>Stop</button>
+    <button id="send" class="icon" type="submit" aria-label="Send" title="Send (Enter)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    </button>
+    <button id="stop" class="icon stop" type="button" aria-label="Stop" title="Stop" hidden>
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+    </button>
   </form>
   <div class="opts">
     <label>Temperature <input id="temp" type="number" min="0" max="1.5" step="0.1" value="0.6"></label>
-    <label>Max new tokens <input id="maxTok" type="number" min="16" max="3000" step="16" value="1200"></label>
+    <label>Max tokens <input id="maxTok" type="number" min="16" max="3000" step="16" value="1200"></label>
     <span class="grow"></span>
-    <button id="clearFoot" type="button" title="Delete the weights stored in this browser (the loaded model keeps working until you reload)">Clear cached weights</button>
-    <button id="reset" type="button">New chat</button>
+    <button id="reset" class="link" type="button">New chat</button>
+    <button id="clearFoot" class="link" type="button" title="Delete the weights stored in this browser (the loaded model keeps working until you reload)">Clear cache</button>
   </div>
 </footer>
 
@@ -151,7 +219,7 @@ $("loadBtn").onclick = async () => {
     tok = await tokJob; await persist;
     const enc = s => tok.encode(s, { add_special_tokens: false });
     ids = { eos: enc("<|im_end|>")[0], enc };
-    $("loader").hidden = true; $("main").hidden = false; $("foot").hidden = false; $("input").focus();
+    $("loader").hidden = true; $("main").hidden = false; $("foot").hidden = false; $("log").replaceChildren(welcome()); $("input").focus();
     const l = engine.loadStats;
     note(`Model ready in ${fmt(l.totalSeconds)} s · ` + (l.fromCache ? `weights loaded from the local cache (${gb(l.cachedBytes)} GB)`
       : l.cachedBytes ? `${gb(l.cachedBytes)} GB from cache, ${gb(l.netBytes)} GB downloaded`
@@ -162,6 +230,14 @@ $("loadBtn").onclick = async () => {
   }
 };
 
+const EXAMPLES = ["Hvad er hovedstaden i Danmark? Svar kort.", "Explain how a bicycle stays upright.", "Skriv et kort digt om efterår.", "Write a haiku about GPUs."];
+function welcome() {
+  const w = el("welcome"), h = document.createElement("h2"), p = document.createElement("p"), chips = el("chips");
+  h.textContent = "What can I help with?"; p.textContent = "Ask in Danish or English. Everything runs on this device.";
+  for (const ex of EXAMPLES) chips.append(Object.assign(document.createElement("button"), { type: "button", className: "chip", textContent: ex,
+    onclick: () => { if (!busy) { $("input").value = ex; $("form").requestSubmit(); } } }));
+  w.append(h, p, chips); return w;
+}
 function note(t) { const d = document.createElement("div"); d.className = "empty"; d.textContent = t; $("log").append(d); }
 function el(cls, text) { const d = document.createElement("div"); d.className = cls; if (text != null) d.textContent = text; return d; }
 function scroll() { $("main").scrollTop = $("main").scrollHeight; }
@@ -183,7 +259,9 @@ function render(box, gen) {                                 // gen: generated to
   const cut = text.indexOf("</think>"), thinking = cut < 0 ? text : text.slice(0, cut), answer = cut < 0 ? "" : text.slice(cut + 8).replace(/^\s+/, "");
   box.think.firstElementChild.textContent = cut < 0 ? "Thinking…" : "Thought process";
   setText(box.think.lastElementChild, thinking.trim());
-  if (cut >= 0 && !box.collapsed) { box.think.open = false; box.collapsed = true; }
+  if (cut >= 0 && !box.collapsed) {                         // collapse, as plain text: reopening must not replay the fade-in
+    box.think.open = false; box.collapsed = true; const t = box.think.lastElementChild; t.textContent = t._text ?? "";
+  }
   setText(box.answer, answer);
 }
 
@@ -203,7 +281,7 @@ function setText(el, text) {
 async function send(userText) {
   busy = true; abort = new AbortController();
   $("send").hidden = true; $("stop").hidden = false; $("input").disabled = true;
-  $("log").querySelectorAll(".empty").forEach(n => n.remove());
+  $("log").querySelectorAll(".empty, .welcome").forEach(n => n.remove());
   $("log").append(el("msg user", userText));
   const box = { think: document.createElement("details"), answer: el("answer"), collapsed: false };
   box.think.className = "think"; box.think.open = true;
@@ -249,10 +327,10 @@ async function send(userText) {
 
 $("form").onsubmit = e => { e.preventDefault(); const v = $("input").value.trim(); if (!v || busy) return; $("input").value = ""; $("input").style.height = ""; send(v); };
 $("input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); } });
-$("input").addEventListener("input", e => { e.target.style.height = "auto"; e.target.style.height = Math.min(160, e.target.scrollHeight) + "px"; });
+$("input").addEventListener("input", e => { e.target.style.height = "auto"; e.target.style.height = Math.min(180, e.target.scrollHeight) + "px"; });
 $("stop").onclick = () => abort?.abort();
 $("reset").onclick = () => { if (busy) abort?.abort(); engine.reset(); pending = null; ended = true; first = true;
-  $("log").replaceChildren(el("empty", "New chat. Ask something.")); setCtx(); $("sPrefill").textContent = "–"; $("sDecode").textContent = "–"; };
+  $("log").replaceChildren(welcome()); setCtx(); $("sPrefill").textContent = "–"; $("sDecode").textContent = "–"; };
 </script>
 </body>
 </html>

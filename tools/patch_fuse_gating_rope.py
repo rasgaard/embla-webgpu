@@ -17,7 +17,7 @@ import numpy as np
 import onnx
 from onnx import TensorProto, helper, numpy_helper
 
-MAX_POS = 8192 + 64                                   # full-layer cache dims go to 8192, + one chunk
+MAX_POS = 8192 + 64                                   # context up to 8,192, + one chunk
 src, dst = sys.argv[1], sys.argv[2]
 m = onnx.load(src, load_external_data=False)
 g = m.graph

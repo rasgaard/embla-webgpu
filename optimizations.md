@@ -207,6 +207,8 @@ Tried, no gain (not kept):
   latency-bound dispatches in a fully serial chain.
 - **Next lever:** reading the weights once for several tokens. A batched WGSL step would serve both prefill (still ORT, ~100
   tok/s) and speculative decoding, for example n-gram drafts from the context verified in one step.
-- **Context:** the cache is capped at 4,096 tokens.
+- **Context:** 8,192 tokens (the model card lists 256K). The limits are the graph's RoPE and key-position tables (built for
+  8,192 + 64 positions) and the WGSL decoder's full-attention caches. Raising it means bigger tables in `patch_fuse_gating_rope.py` /
+  `patch_syncs.py` (a 16K build checked out at 10K tokens: WGSL and ORT within 8.7e-5, decode ~100 tok/s); prefill (ORT, ~100 tok/s) and full attention get slower with length.
 - **Tested only on Apple silicon in Chromium.** The decoder needs WebGPU `subgroups` and ~4 GB storage buffers; without subgroups
   the engine decodes on the ORT graph (~66 ms a token).
